@@ -1,71 +1,77 @@
-const express = require('express');
+const express = require("express");
+const mongoose = require("mongoose");
 const app = express();
+
 app.use(express.json());
-
-let bookings = [
-    { id: 1, name: "chaithra", event: "Node.js Workshop", email: "chaithra123@gmail.com" },
-    { id: 2, name: "rithika", event: "React Bootcamp", email: "rithika123@gmail.com" }
-];
-
-function validateBookingInput(req, res) {
-    const { name, event, email } = req.body;
-    if (!name || typeof name !== 'string' || name.trim() === '') {
-        return res.status(400).send("Invalid participant name");
-    }
-    if (!event || typeof event !== 'string' || event.trim() === '') {
-        return res.status(400).send("Invalid event name");
-    }
-    if (!email || typeof email !== 'string' || !/^\S+@\S+\.\S+$/.test(email)) {
-        return res.status(400).send("Invalid email address");
-    }
-    return null;
-}
-
-app.get('/api/bookings', (req, res) => {
-    res.json(bookings);
+mongoose.connect("mongodb+srv://chaithranaik:chaithra123@cluster0.guocpbh.mongodb.net/synergiaDB")
+  .then(() => console.log("Connected to MongoDB"))
+  .catch((err) => console.log("MongoDB connection error:", err));
+const bookingSchema = new mongoose.Schema({
+  name: String,
+  email: String,
+  event: String,
+  ticketType: String,
+  createdAt: { type: Date, default: Date.now }
 });
+const Booking = mongoose.model("Booking", bookingSchema);
+app.post("/api/bookings", async (req, res) => {
+  try {
+    const { name, email, event, ticketType } = req.body;
 
-app.post('/api/bookings', (req, res) => {
-    const validationError = validateBookingInput(req, res);
-    if (validationError) return;
-
-    const newBooking = { id: bookings.length + 1, ...req.body };
-    bookings.push(newBooking);
-    res.status(201).json({ message: "Booking created successfully", booking: newBooking });
-});
-
-app.get('/api/bookings/:id', (req, res) => {
-    const booking = bookings.find(b => b.id == req.params.id);
-    if (booking) {
-        res.json(booking);
-    } else {
-        res.status(404).send("Booking not found");
+    if (!name || !email || !event || !ticketType) {
+      return res.status(400).json({ message: "All fields are required" });
     }
+
+    const booking = new Booking({ name, email, event, ticketType });
+    await booking.save();
+    res.status(201).json({ message: "Booking created", booking });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
-
-app.put('/api/bookings/:id', (req, res) => {
-    const validationError = validateBookingInput(req, res);
-    if (validationError) return;
-
-    const index = bookings.findIndex(b => b.id == req.params.id);
-    if (index !== -1) {
-        bookings[index] = { id: bookings[index].id, ...req.body };
-        res.json({ message: "Booking updated successfully", booking: bookings[index] });
-    } else {
-        res.status(404).send("Booking not found");
-    }
+app.get("/api/bookings", async (req, res) => {
+  const bookings = await Booking.find();
+  res.json(bookings);
 });
-
-app.delete('/api/bookings/:id', (req, res) => {
-    const index = bookings.findIndex(b => b.id == req.params.id);
-    if (index !== -1) {
-        const deletedBooking = bookings.splice(index, 1);
-        res.json({ message: "Booking canceled successfully", booking: deletedBooking[0] });
-    } else {
-        res.status(404).send("Booking not found");
-    }
+app.get("/api/bookings/:id", async (req, res) => {
+  try {
+    const booking = await Booking.findById(req.params.id);
+    if (!booking) return res.status(404).json({ message: "Booking not found" });
+    res.json(booking);
+  } catch {
+    res.status(400).json({ message: "Invalid ID format" });
+  }
 });
-
-app.listen(5000, () => console.log("Server running on port 5000"));
-
+app.put("/api/bookings/:id", async (req, res) => {
+  try {
+    const booking = await Booking.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    if (!booking) return res.status(404).json({ message: "Booking not found" });
+    res.json({ message: "Booking updated", booking });
+  } catch {
+    res.status(400).json({ message: "Invalid ID format" });
+  }
+});
+app.delete("/api/bookings/:id", async (req, res) => {
+  try {
+    const booking = await Booking.findByIdAndDelete(req.params.id);
+    if (!booking) return res.status(404).json({ message: "Booking not found" });
+    res.json({ message: "Booking deleted" });
+  } catch {
+    res.status(400).json({ message: "Invalid ID format" });
+  }
+});
+app.get("/api/bookings/search", async (req, res) => {
+  const { email } = req.query;
+  const booking = await Booking.findOne({ email });
+  if (!booking) return res.status(404).json({ message: "No booking found" });
+  res.json(booking);
+});
+app.get("/api/bookings/filter", async (req, res) => {
+  const { event } = req.query;
+  const bookings = await Booking.find({ event });
+  res.json(bookings);
+});
+app.listen(5000, () => {
+  console.log("Server running on http://localhost:5000");
+});
 
